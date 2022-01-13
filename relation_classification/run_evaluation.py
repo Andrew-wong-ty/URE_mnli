@@ -81,11 +81,17 @@ id2labels = dict(zip(
     list(labels2id.keys())
 ))
 
-
+with open(arguments.split_path) as file:
+    split_ids = file.readlines()
+    split_ids = [item.replace("\n","") for item in split_ids]
 
 with open(args.input_file, "rt") as f:
     features, labels, relations = [], [],[]
     for line in json.load(f):
+        id = line['id']
+        if arguments.split:
+            if id not in split_ids:
+                continue
         line["relation"] = (
             line["relation"] if not args.basic else TACRED_BASIC_LABELS_MAPPING.get(line["relation"], line["relation"])
         )
@@ -114,25 +120,26 @@ with open(args.input_file, "rt") as f:
         labels.append(labels2id[line["relation"]])
 
 # dict_keys(['text', 'rel', 'subj', 'obj', 'subj_type', 'obj_type', 'top1', 'top2', 'label', 'pos_or_not'])
-dataset = {
+
+
+if arguments.save_dataset_name is not None:
+    dataset = {
     'text':[],
     'rel':[],
     'subj':[],
     'obj':[],
     'subj_type':[],
     'obj_type':[],
-}
-assert len(features)==len(relations)
-for feat,rel in zip(features,relations):
-    dataset['text'].append(feat.context)
-    dataset['rel'].append(rel)
-    dataset['subj'].append(feat.subj)
-    dataset['obj'].append(feat.obj)
-    subj_type,obj_type = feat.pair_type.split(":")
-    dataset['subj_type'].append(subj_type)
-    dataset['obj_type'].append(obj_type)
-
-if arguments.save_dataset_name is not None:
+    }
+    assert len(features)==len(relations)
+    for feat,rel in zip(features,relations):
+        dataset['text'].append(feat.context)
+        dataset['rel'].append(rel)
+        dataset['subj'].append(feat.subj)
+        dataset['obj'].append(feat.obj)
+        subj_type,obj_type = feat.pair_type.split(":")
+        dataset['subj_type'].append(subj_type)
+        dataset['obj_type'].append(obj_type)
     save(dataset,os.path.join("/home/tywang/myURE/URE/TACRED/tac_six_key",arguments.save_dataset_name))
 
 
@@ -167,7 +174,8 @@ for configuration in config:
     if not "use_threshold" in configuration or configuration["use_threshold"]:
         if arguments.get_optimal_threshold:
             optimal_threshold, _ = find_optimal_threshold(labels, output)  
-            # 0.01 dev optimal_threshold = 0.922922
+            # 0.01 dev optimal_threshold = 0.922922 
+            # selected by oscar 0.01 dev optimal_threshold = 0.96096
         else:
             optimal_threshold = 0.922922 # set default threshold
         output_,applied_threshold_output = apply_threshold(output, threshold=optimal_threshold)
