@@ -21,5 +21,6 @@ selected_ratio = None  # 在数据中(eg dev.json) 随机选择一定比例的�
 
 ################### bool  ##################
 get_optimal_threshold = False # 是否计算该数据集对应的optimal threshold
+save_dataset_name = "test.pkl"
 
 

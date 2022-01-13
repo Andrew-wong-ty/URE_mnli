@@ -81,6 +81,8 @@ id2labels = dict(zip(
     list(labels2id.keys())
 ))
 
+
+
 with open(args.input_file, "rt") as f:
     features, labels, relations = [], [],[]
     for line in json.load(f):
@@ -110,6 +112,28 @@ with open(args.input_file, "rt") as f:
         )
         relations.append(line["relation"])
         labels.append(labels2id[line["relation"]])
+
+# dict_keys(['text', 'rel', 'subj', 'obj', 'subj_type', 'obj_type', 'top1', 'top2', 'label', 'pos_or_not'])
+dataset = {
+    'text':[],
+    'rel':[],
+    'subj':[],
+    'obj':[],
+    'subj_type':[],
+    'obj_type':[],
+}
+assert len(features)==len(relations)
+for feat,rel in zip(features,relations):
+    dataset['text'].append(feat.context)
+    dataset['rel'].append(rel)
+    dataset['subj'].append(feat.subj)
+    dataset['obj'].append(feat.obj)
+    subj_type,obj_type = feat.pair_type.split(":")
+    dataset['subj_type'].append(subj_type)
+    dataset['obj_type'].append(obj_type)
+
+if arguments.save_dataset_name is not None:
+    save(dataset,os.path.join("/home/tywang/myURE/URE/TACRED/tac_six_key",arguments.save_dataset_name))
 
 
 labels = np.array(labels)  # feature的label
@@ -162,14 +186,6 @@ for configuration in config:
     configuration["top-3"], top3_p_rel = top_k_accuracy(applied_threshold_output, labels, k=3, id2labels=id2labels)
     for i in range(1,4):
         print("top{} acc={:.4f}".format(i, configuration["top-{}".format(i)]))
-
-
-    
-
-
-
-    
-
 
 
     del classifier
