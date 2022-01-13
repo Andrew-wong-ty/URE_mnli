@@ -172,6 +172,5 @@ for configuration in config:
 
 
 
-
     del classifier
     torch.cuda.empty_cache()
