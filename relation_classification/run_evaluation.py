@@ -176,6 +176,7 @@ for configuration in config:
             optimal_threshold, _ = find_optimal_threshold(labels, output)  
             # 0.01 dev optimal_threshold = 0.922922 
             # selected by oscar 0.01 dev optimal_threshold = 0.96096
+            # re-tac 0.01dev optimal_threshold 0.8758758758758759
         else:
             optimal_threshold = 0.922922 # set default threshold
         output_,applied_threshold_output = apply_threshold(output, threshold=optimal_threshold)

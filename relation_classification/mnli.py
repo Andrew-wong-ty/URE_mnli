@@ -327,7 +327,9 @@ class NLIRelationClassifierWithMappingHead(_NLIRelationClassifier):
         if arguments.outputs==None:
             print("outputs is None, compute out")
             outputs = super().__call__(features, batch_size, multiclass)  # 用mnli
-            save(outputs,os.path.join(arguments.out_save_path,"num{}_{}_.pkl".format(len(outputs),arguments.current_time)))
+            save(outputs,os.path.join(arguments.out_save_path,"num{}_{}_{}.pkl".format(
+                len(outputs),arguments.current_time,arguments.task_name
+                )))
         else:
             outputs = load(arguments.outputs)  # 用已经搞好了的mnli output
         
