@@ -89,7 +89,7 @@ with open(args.input_file, "rt") as f:
     features, labels, relations = [], [],[]
     for line in json.load(f):
         id = line['id']
-        if arguments.split:
+        if arguments.split and arguments.selected_ratio is None:
             if id not in split_ids:
                 continue
         line["relation"] = (
@@ -122,25 +122,8 @@ with open(args.input_file, "rt") as f:
 # dict_keys(['text', 'rel', 'subj', 'obj', 'subj_type', 'obj_type', 'top1', 'top2', 'label', 'pos_or_not'])
 
 
-if arguments.save_dataset_name is not None:
-    dataset = {
-    'text':[],
-    'rel':[],
-    'subj':[],
-    'obj':[],
-    'subj_type':[],
-    'obj_type':[],
-    }
-    assert len(features)==len(relations)
-    for feat,rel in zip(features,relations):
-        dataset['text'].append(feat.context)
-        dataset['rel'].append(rel)
-        dataset['subj'].append(feat.subj)
-        dataset['obj'].append(feat.obj)
-        subj_type,obj_type = feat.pair_type.split(":")
-        dataset['subj_type'].append(subj_type)
-        dataset['obj_type'].append(obj_type)
-    save(dataset,os.path.join("/home/tywang/myURE/URE/TACRED/tac_six_key",arguments.save_dataset_name))
+
+    
 
 
 labels = np.array(labels)  # feature的label
@@ -153,6 +136,7 @@ if arguments.selected_ratio is not None:
     random.shuffle(indexes)
     indexes = indexes[:int(L*arguments.selected_ratio)]
     features = [features[i] for i in indexes]
+    relations = [relations[i] for i in indexes]
     labels = labels[np.array(indexes)]
 
 
@@ -195,7 +179,36 @@ for configuration in config:
     configuration["top-3"], top3_p_rel = top_k_accuracy(applied_threshold_output, labels, k=3, id2labels=id2labels)
     for i in range(1,4):
         print("top{} acc={:.4f}".format(i, configuration["top-{}".format(i)]))
+    
 
+    
+
+    if arguments.save_dataset_name is not None:
+        dataset = {
+        'text':[],
+        'rel':[],
+        'subj':[],
+        'obj':[],
+        'subj_type':[],
+        'obj_type':[],
+        }
+        assert len(features)==len(relations)
+        for feat,rel in zip(features,relations):
+            dataset['text'].append(feat.context)
+            dataset['rel'].append(rel)
+            dataset['subj'].append(feat.subj)
+            dataset['obj'].append(feat.obj)
+            subj_type,obj_type = feat.pair_type.split(":")
+            dataset['subj_type'].append(subj_type)
+            dataset['obj_type'].append(obj_type)
+        dataset['top1'] = top1_p_rel
+        dataset['top2'] = top2_p_rel
+        dataset['top3'] = top3_p_rel
+            
+        save(dataset,os.path.join("/home/tywang/myURE/URE/TACRED/tac_six_key",arguments.save_dataset_name))
+    # 想干嘛就干嘛
+    # temp = load("/home/tywang/myURE/URE/O2U_bert/tac_data/whole/test_for_top12.pkl")
+    # save([top1_p_rel,top2_p_rel,top3_p_rel],"/home/tywang/myURE/URE/O2U_bert/tac_data/whole/top123_p_rel_of_test.pkl")
 
     del classifier
     torch.cuda.empty_cache()
