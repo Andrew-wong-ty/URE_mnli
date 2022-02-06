@@ -92,6 +92,10 @@ class _NLIRelationClassifier(Classifier):
     def _initialize(self, pretrained_model):
         self.tokenizer = AutoTokenizer.from_pretrained(pretrained_model)
         self.model = AutoModelForSequenceClassification.from_pretrained(pretrained_model)
+        if arguments.load_dict:
+            print("load weight ",arguments.dict_path)
+
+            self.model.load_state_dict(torch.load(arguments.dict_path))
         self.config = AutoConfig.from_pretrained(pretrained_model)
         self.ent_pos = self.config.label2id.get("ENTAILMENT", self.config.label2id.get("entailment", None))
         if self.ent_pos is None:
@@ -100,6 +104,7 @@ class _NLIRelationClassifier(Classifier):
             self.ent_pos = int(self.ent_pos)
 
     def _run_batch(self, batch, multiclass=False):
+        # here
         with torch.no_grad():
             input_ids = self.tokenizer.batch_encode_plus(batch, padding=True, truncation=True)
             input_ids = torch.tensor(input_ids["input_ids"]).to(self.device)
@@ -327,9 +332,12 @@ class NLIRelationClassifierWithMappingHead(_NLIRelationClassifier):
         if arguments.outputs==None:
             print("outputs is None, compute out")
             outputs = super().__call__(features, batch_size, multiclass)  # 用mnli
-            save(outputs,os.path.join(arguments.out_save_path,"num{}_{}_{}.pkl".format(
+            save_path = os.path.join(arguments.out_save_path,"num{}_{}_{}.pkl".format(
                 len(outputs),arguments.current_time,arguments.task_name
-                )))
+                ))
+            if arguments.selected_ratio>0.5:
+                print("save to ",save_path)
+                save(outputs,save_path)
         else:
             outputs = load(arguments.outputs)  # 用已经搞好了的mnli output
         

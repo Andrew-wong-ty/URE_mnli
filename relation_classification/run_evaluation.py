@@ -158,11 +158,15 @@ for configuration in config:
     if not "use_threshold" in configuration or configuration["use_threshold"]:
         if arguments.get_optimal_threshold:
             optimal_threshold, _ = find_optimal_threshold(labels, output)  
-            # 0.01 dev optimal_threshold = 0.922922 
+            print("optimal threshold:",optimal_threshold)
+            # 0.01 dev optimal_threshold = 0.9379379379379379  (没有finetune) 
+            # 0.01 dev 0.01trai一半pos一半neg finetune  1.0
+            # 0.01 dev 0.01train全pos finetune  0.997997997997998
+            # 0.01 dev 0.01train全neg finetune  0.8188188188188188
             # selected by oscar 0.01 dev optimal_threshold = 0.96096
             # re-tac 0.01dev optimal_threshold 0.8758758758758759
         else:
-            optimal_threshold = 0.922922 # set default threshold
+            optimal_threshold = 0.995995995995996 # set default threshold
         output_,applied_threshold_output = apply_threshold(output, threshold=optimal_threshold)
     else:
         output_ = output.argmax(-1)
