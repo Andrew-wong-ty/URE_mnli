@@ -1,2 +1,3 @@
 # URE_mnli
-Base the source code of Ask2Transformers @osainz59 
+Using pre-train Textual Entailment model for zero-shot Relation Extraction.
+Base Ask2Transformers @osainz59 
