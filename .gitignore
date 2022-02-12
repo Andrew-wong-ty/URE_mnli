@@ -7,7 +7,7 @@ redundancy/*
 *.pkl
 *.json
 onnx/
-
+relation_classification/why
 .ignore/
 
 # Visual Studio Code
