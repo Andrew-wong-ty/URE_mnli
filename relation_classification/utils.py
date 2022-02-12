@@ -45,9 +45,11 @@ def apply_threshold(output, threshold=0.0, ignore_negative_prediction=True):
         output_[:, 0] = 0.0
     activations = (output_ >= threshold).sum(-1).astype(np.int)  # 如果没有一个pos rel的 prob>threshold  , 那么归为no-rel
     output_[activations == 0, 0] = 1.00
+
+    
     applied_threshold_output = copy.deepcopy(output_)
 
-    return output_.argmax(-1),applied_threshold_output
+    return output_.argmax(-1),applied_threshold_output  # matrix
 
 
 def find_optimal_threshold(labels, output, granularity=1000, metric=f1_score_):

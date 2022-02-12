@@ -16,6 +16,7 @@ from dataclasses import dataclass
 from URE_mnli.relation_classification import arguments
 from URE_mnli.relation_classification.utils import load,save
 import numpy as np
+import copy
 import torch
 from tqdm import tqdm
 from transformers import (
@@ -64,7 +65,7 @@ class _NLIRelationClassifier(Classifier):
         self.negative_threshold = negative_threshold
         self.negative_idx = negative_idx
         self.max_activations = max_activations
-        self.n_rel = len(labels)
+        self.n_rel = len(labels)  # n_rel==n_template>42
         # for label in labels:
         #     assert '{subj}' in label and '{obj}' in label
 
@@ -84,7 +85,7 @@ class _NLIRelationClassifier(Classifier):
         else:
             self.valid_conditions = None
 
-        def idx2label(idx):
+        def idx2label(idx):  # all template idx TO label
             return self.labels[idx]
 
         self.idx2label = np.vectorize(idx2label)
@@ -128,14 +129,14 @@ class _NLIRelationClassifier(Classifier):
 
         batch, outputs = [], []
         for i, feature in tqdm(enumerate(features), total=len(features)):
-            sentences = [
+            sentences = [  # 对某个sentence, 遍历所有的template (n_template=73)
                 f"{feature.context} {self.tokenizer.sep_token} {label_template.format(subj=feature.subj, obj=feature.obj)}."
                 for label_template in self.labels
             ]
             batch.extend(sentences)
 
             if (i + 1) % batch_size == 0:
-                output = self._run_batch(batch, multiclass=multiclass)
+                output = self._run_batch(batch, multiclass=multiclass) # shape=[bs, prob(跑出来的p_entailment)] # [array([0.000954, 0.0...e=float16)]
                 outputs.append(output)
                 batch = []
 
@@ -143,7 +144,7 @@ class _NLIRelationClassifier(Classifier):
             output = self._run_batch(batch, multiclass=multiclass)
             outputs.append(output)
 
-        outputs = np.vstack(outputs)
+        outputs = np.vstack(outputs)  # [n_data, prob(跑出来的p_entailment)]
 
         return outputs
 
@@ -280,22 +281,24 @@ class NLIRelationClassifierWithMappingHead(_NLIRelationClassifier):
     def __init__(
         self,
         labels: List[str],
-        template_mapping: Dict[str, str],
+        template_mapping: Dict[str, str],  # key: rel ,  value: template
         pretrained_model: str = arguments.model_path,
         valid_conditions: Dict[str, list] = None,
         *args,
         **kwargs,
     ):
 
-        self.template_mapping_reverse = defaultdict(list)
+        self.template_mapping_reverse = defaultdict(list) # key: template,  value: rel
         for key, value in template_mapping.items():
             for v in value:
-                self.template_mapping_reverse[v].append(key)
-        self.new_topics = list(self.template_mapping_reverse.keys())
+                # template_mapping_reverse key: template,  value: relation, 可能有多个rel 
+                self.template_mapping_reverse[v].append(key)   
+        self.new_topics = list(self.template_mapping_reverse.keys())  # 所有的template
 
-        self.target_labels = labels
-        self.new_labels2id = {t: i for i, t in enumerate(self.new_topics)}
-        self.mapping = defaultdict(list)
+        self.target_labels = labels  # 所有的label
+        self.new_labels2id = {t: i for i, t in enumerate(self.new_topics)}  # template 2 id
+        self.new_id2labels = dict(zip(self.new_labels2id.values(),self.new_labels2id.keys()))
+        self.mapping = defaultdict(list)  # key:rel  value: template_id
         for key, value in template_mapping.items():
             self.mapping[key].extend([self.new_labels2id[v] for v in value])
 
@@ -306,8 +309,8 @@ class NLIRelationClassifierWithMappingHead(_NLIRelationClassifier):
             valid_conditions=None,
             **kwargs,
         )
-
-        if valid_conditions:
+        # 下面, 最终得到valid_conditions: key:rel,  value [subj_type:obj_type]
+        if valid_conditions:  # 各个rel的constrain
             self.valid_conditions = {}
             rel2id = {r: i for i, r in enumerate(labels)}
             self.n_rel = len(rel2id)
@@ -331,16 +334,25 @@ class NLIRelationClassifierWithMappingHead(_NLIRelationClassifier):
     def __call__(self, features: List[REInputFeatures], batch_size=1, multiclass=True):
         if arguments.outputs==None:
             print("outputs is None, compute out")
-            outputs = super().__call__(features, batch_size, multiclass)  # 用mnli
+            outputs = super().__call__(features, batch_size, multiclass)  # [n_data, entailment_prob(73个)]
             save_path = os.path.join(arguments.out_save_path,"num{}_{}_{}.pkl".format(
                 len(outputs),arguments.current_time,arguments.task_name
                 ))
-            if arguments.selected_ratio>0.5:
+            if arguments.mode!="0.01dev":
                 print("save to ",save_path)
                 save(outputs,save_path)
         else:
             outputs = load(arguments.outputs)  # 用已经搞好了的mnli output
+        template_socre = copy.deepcopy(outputs)
+        # 获取各个template的score,  从大到小排序
+        outputs_sorted_index  = np.argsort(outputs,axis=1)[:,::-1]
+        template_sorted = list() # the same shape as outputs_sorted_index
+        for templates_out in outputs_sorted_index:
+            template_sorted.append([self.new_id2labels[template_id] for template_id in templates_out])
+
         
+
+
         outputs = np.hstack(
             [
                 np.max(outputs[:, self.mapping[label]], axis=-1, keepdims=True)
@@ -356,7 +368,7 @@ class NLIRelationClassifierWithMappingHead(_NLIRelationClassifier):
 
         outputs = self._apply_negative_threshold(outputs)
 
-        return outputs
+        return outputs,template_socre,template_sorted, self.template_mapping_reverse
 
 
 class GenerativeNLIRelationClassifier(_GenerativeNLIRelationClassifier, NLIRelationClassifier):

@@ -16,8 +16,8 @@ import torch
 
 import numpy as np
 import random
-from sklearn.metrics import precision_recall_fscore_support, confusion_matrix
-
+from sklearn.metrics import precision_recall_fscore_support
+from URE.clean_data.clean import get_format_train_text
 from URE_mnli.relation_classification.mnli import NLIRelationClassifierWithMappingHead, REInputFeatures
 from URE_mnli.relation_classification.tacred import *
 from URE_mnli.relation_classification import arguments
@@ -74,7 +74,6 @@ labels2id = (
     if not args.basic
     else {label: i for i, label in enumerate(TACRED_BASIC_LABELS)}
 )
-
 # id2labels
 id2labels = dict(zip(
     list(labels2id.values()),
@@ -86,7 +85,7 @@ with open(arguments.split_path) as file:
     split_ids = [item.replace("\n","") for item in split_ids]
 
 with open(args.input_file, "rt") as f:
-    features, labels, relations = [], [],[]
+    features, labels, relations,subj_pos,obj_pos = [], [],[],[],[]
     for line in json.load(f):
         id = line['id']
         if arguments.split and arguments.selected_ratio is None:
@@ -95,6 +94,10 @@ with open(args.input_file, "rt") as f:
         line["relation"] = (
             line["relation"] if not args.basic else TACRED_BASIC_LABELS_MAPPING.get(line["relation"], line["relation"])
         )
+        subj_posistion= [line["subj_start"] , line["subj_end"]]
+        subj_pos.append(subj_posistion)
+        obj_posistion= [line["obj_start"] , line["obj_end"]]
+        obj_pos.append(obj_posistion)
         features.append(
             REInputFeatures(
                 subj=" ".join(line["token"][line["subj_start"] : line["subj_end"] + 1])
@@ -123,10 +126,9 @@ with open(args.input_file, "rt") as f:
 
 
 
-    
-
 
 labels = np.array(labels)  # feature的label
+print(Counter(relations))
 
 
 # 根据select_ratio随机选择数据
@@ -150,49 +152,64 @@ for configuration in config:
     os.makedirs(f"experiments/{configuration['name']}", exist_ok=True)
     _ = configuration.pop("negative_threshold", None)
     classifier = CLASSIFIERS[configuration["classification_model"]](negative_threshold=0.0, **configuration)
-    output = classifier(
+    output,template_socre,template_sorted, template2label = classifier(
         features,
         batch_size=configuration["batch_size"],
         multiclass=configuration["multiclass"],
     )
+    #save(template2label,"/home/tywang/myURE/URE/O2U_bert/tac_data/whole/train_template2label.pkl")
     if not "use_threshold" in configuration or configuration["use_threshold"]:
         if arguments.get_optimal_threshold:
             optimal_threshold, _ = find_optimal_threshold(labels, output)  
             print("optimal threshold:",optimal_threshold)
-            # 0.01 dev optimal_threshold = 0.9379379379379379  (没有finetune) 
+            # 0.01 dev optimal_threshold = 0.9379379379379379(13)  (没有finetune) 
             # 0.01 dev 0.01trai一半pos一半neg finetune  1.0
             # 0.01 dev 0.01train全pos finetune  0.997997997997998
             # 0.01 dev 0.01train全neg finetune  0.8188188188188188
             # selected by oscar 0.01 dev optimal_threshold = 0.96096
             # re-tac 0.01dev optimal_threshold 0.8758758758758759
         else:
-            optimal_threshold = 0.995995995995996 # set default threshold
-        output_,applied_threshold_output = apply_threshold(output, threshold=optimal_threshold)
+            
+            optimal_threshold = arguments.default_optimal_threshold # set default threshold
+            print("use threshold:{}".format(optimal_threshold))
+        top1,applied_threshold_output = apply_threshold(output, threshold=optimal_threshold)
     else:
-        output_ = output.argmax(-1)
+        top1 = output.argmax(-1)
+
     pre, rec, f1, _ = precision_recall_fscore_support(  # 应该是只算pos的,  因为当预测全为neg_rel的时候, f1 = 0
-        labels, output_, average="micro", labels=list(range(1, n_labels))
+        labels, top1, average="micro", labels=list(range(1, n_labels))
     )
+    top1_acc = sum(top1==labels)/len(labels)
+    top1_p_rel = [id2labels[item] for item in top1]
+
 
     configuration["precision"] = pre
     configuration["recall"] = rec
     configuration["f1-score"] = f1
 
-    configuration["top-1"], top1_p_rel = top_k_accuracy(applied_threshold_output, labels, k=1, id2labels=id2labels)
+    configuration["top-1"] = top1_acc
     configuration["top-2"], top2_p_rel = top_k_accuracy(applied_threshold_output, labels, k=2, id2labels=id2labels)
     configuration["top-3"], top3_p_rel = top_k_accuracy(applied_threshold_output, labels, k=3, id2labels=id2labels)
+    print("labeled f1:{:.4f}".format(f1))
+    print("precision:{:.4f}".format(pre))
+    print("recall:{:.4f}".format(rec))
     for i in range(1,4):
         print("top{} acc={:.4f}".format(i, configuration["top-{}".format(i)]))
     
 
     
 
-    if arguments.save_dataset_name is not None:
+    if arguments.generate_data is not None:
+        label2id = load(arguments.label2id_path)
+        id2label = dict(zip(label2id.values(),label2id.keys()))
+        # save(id2label,"/home/tywang/myURE/URE_mnli/temp_files/analysis_0.01510/id2label.pkl")
         dataset = {
         'text':[],
         'rel':[],
         'subj':[],
         'obj':[],
+        'subj_pos':subj_pos,
+        'obj_pos':obj_pos,
         'subj_type':[],
         'obj_type':[],
         }
@@ -205,14 +222,27 @@ for configuration in config:
             subj_type,obj_type = feat.pair_type.split(":")
             dataset['subj_type'].append(subj_type)
             dataset['obj_type'].append(obj_type)
-        dataset['top1'] = top1_p_rel
-        dataset['top2'] = top2_p_rel
-        dataset['top3'] = top3_p_rel
-            
-        save(dataset,os.path.join("/home/tywang/myURE/URE/TACRED/tac_six_key",arguments.save_dataset_name))
-    # 想干嘛就干嘛
-    # temp = load("/home/tywang/myURE/URE/O2U_bert/tac_data/whole/test_for_top12.pkl")
-    # save([top1_p_rel,top2_p_rel,top3_p_rel],"/home/tywang/myURE/URE/O2U_bert/tac_data/whole/top123_p_rel_of_test.pkl")
-
-    del classifier
-    torch.cuda.empty_cache()
+        for text,subj, subj_p, obj,obj_p in zip(dataset['text'],dataset['subj'],dataset['subj_pos'],dataset['obj'],dataset['obj_pos']):
+            assert ' '.join(text.split()[subj_p[0]:subj_p[1]+1])==subj
+            assert ' '.join(text.split()[obj_p[0]:obj_p[1]+1])==obj
+        # save(dataset,"/home/tywang/myURE/URE/clean_data/test_data/tac_clean_testdata.pkl")
+        # dataset, etags = get_format_train_text(dataset,True)
+        # save(etags,"/home/tywang/myURE/URE/O2U_bert/tac_data/train_tags.pkl")
+        # tags = load("/home/tywang/myURE/URE/O2U_bert/tac_data/train_tags.pkl")
+        dataset['template'] = template_sorted
+        dataset['index'] = [i for i in range(len(dataset['text']))]
+        dataset['label'] = [label2id[item] for item in relations]
+        dataset['top1'] = [label2id[item] for item in top1_p_rel]
+        dataset['top2'] = [label2id[item] for item in top2_p_rel]
+        dataset['top3'] = [label2id[item] for item in top3_p_rel]
+        top1_acc = sum(np.array(dataset['label'])==np.array(dataset['top1']))/len(dataset['label'])
+        _, _, f1_, _ = precision_recall_fscore_support(  # 应该是只算pos的,  因为当预测全为neg_rel的时候, f1 = 0
+        dataset['label'], dataset['top1'] , average="micro", labels=list(range(0,41))
+        )
+        print("top1 acc: ",top1_acc)
+        print("labeled f1: ",f1_)
+        # save(dataset,"/home/tywang/myURE/URE_mnli/relation_classification/研究数据/n0.1train.pkl")
+        #save(dataset,"/home/tywang/myURE/URE_mnli/temp_files/analysis_0.01510/tac_{}_num{}_top1_{:.4f}.pkl".format(arguments.mode,len(dataset['text']),top1_acc))
+        
+    # del classifier
+    # torch.cuda.empty_cache()

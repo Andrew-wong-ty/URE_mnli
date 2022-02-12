@@ -59,7 +59,7 @@
             "{subj} is also known as {obj}"
         ],
         "per:date_of_birth": [
-            "{subj}\u00e2\u0080\u0099s birthday is on {obj}",
+            "{subj} 's birthday is on {obj}",
             "{subj} was born in {obj}"
         ],
         "per:age": [
