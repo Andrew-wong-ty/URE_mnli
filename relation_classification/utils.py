@@ -38,6 +38,18 @@ def precision_recall_fscore_(labels, preds, n_labels=42):
     return p, r, f
 
 
+def find_uppercase(str1:list, str2:list):
+	"""
+		str1 is a longer text
+		str2(only lower case) is text included in str1
+		find text in str1 that consist with str2, ignoring case. Then return the text in str1
+	"""
+	l2 = len(str2)
+	for i in range(len(str1[:-l2])+1):
+		if ' '.join(str1[i:i+l2]).lower().split()==str2:
+			return ' '.join(str1[i:i+l2])
+	return ' '.join(str2)
+
 def apply_threshold(output, threshold=0.0, ignore_negative_prediction=True):
     """Applies a threshold to determine whether is a relation or not"""
     output_ = output.copy()

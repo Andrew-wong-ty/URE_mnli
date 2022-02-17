@@ -7,7 +7,9 @@ PATH = Path(CURR_FILE_PATH)
 CURR_DIR = str(PATH.parent.absolute())
 sys.path.append(str(PATH.parent.parent.parent.absolute()))
 sys.path.append(str(PATH.parent.parent.parent.parent.absolute()))
+sys.path.append(str(PATH.parent.parent.parent.parent.parent.absolute()))
 sys.path.append(CURR_DIR)
+sys.path.append("/home/tywang/myURE/")
 
 from collections import defaultdict
 from pprint import pprint
@@ -157,10 +159,36 @@ class _NLIRelationClassifier(Classifier):
         return probs
 
     def _apply_valid_conditions(self, probs, features: List[REInputFeatures]):
+        mask_matrix = []
+        for feature in features:
+            pair_type = feature.pair_type
+            if ':' in pair_type:
+                mask_matrix.append(self.valid_conditions.get(feature.pair_type, np.ones(self.n_rel)))
+            elif '-' in pair_type:
+                sub_type,obj_type = pair_type.split('-')
+                masks = np.zeros(self.n_rel)
+                temp = []
+                for vali_type,mask in self.valid_conditions.items():
+                    vali_type:str
+                    sub_type:str
+                    obj_type:str
+                    if vali_type.startswith(sub_type) or vali_type.endswith(obj_type):
+                        masks = masks+mask
+                        temp.append(vali_type)
+                masks = np.clip(masks,0,1)
+                mask_matrix.append(masks)
         mask_matrix = np.stack(
-            [self.valid_conditions.get(feature.pair_type, np.zeros(self.n_rel)) for feature in features],
+            mask_matrix,
             axis=0,
         )
+        """
+        旧的
+        """
+        # mask_matrix = np.stack(
+        #     [self.valid_conditions.get(feature.pair_type, np.ones(self.n_rel)) for feature in features],
+        #     axis=0,
+        # )
+        # wiki test 有742个是 all, 就会是全0的mask
         probs = probs * mask_matrix
 
         return probs
@@ -320,7 +348,8 @@ class NLIRelationClassifierWithMappingHead(_NLIRelationClassifier):
                 for condition in conditions:
                     if condition not in self.valid_conditions:
                         self.valid_conditions[condition] = np.zeros(self.n_rel)
-                        self.valid_conditions[condition][rel2id["no_relation"]] = 1.0
+                        if arguments.dataset=='tac':
+                            self.valid_conditions[condition][rel2id["no_relation"]] = 1.0
                     self.valid_conditions[condition][rel2id[relation]] = 1.0
 
         else:
